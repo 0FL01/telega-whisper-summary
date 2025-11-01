@@ -18,8 +18,8 @@ const (
 
 // Значения по умолчанию
 const (
-	DefaultPrimaryModel  = "gemini-2.5-flash"
-	DefaultFallbackModel = "gemini-2.0-flash"
+	DefaultPrimaryModel  = "gemini-flash-latest"
+	DefaultFallbackModel = "gemini-flash-lite-latest"
 )
 
 var (
