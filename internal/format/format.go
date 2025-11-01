@@ -8,24 +8,38 @@ import (
 )
 
 func FormatHTML(text string) string {
-	reCodeBlock := regexp.MustCompile("(?s)```(\\w+)?\n(.*?)\n```")
-	text = reCodeBlock.ReplaceAllStringFunc(text, func(match string) string {
-		parts := reCodeBlock.FindStringSubmatch(match)
-		lang, code := "", parts[2]
-		if len(parts) > 1 {
-			lang = parts[1]
-		}
-		return fmt.Sprintf(`<pre><code class="language-%s">%s</code></pre>`, lang, html.EscapeString(strings.TrimSpace(code)))
-	})
-	reBold := regexp.MustCompile(`\*\*(.*?)\*\*`)
-	text = reBold.ReplaceAllString(text, `<b>$1</b>`)
-	reItalic := regexp.MustCompile(`\*(.*?)\*`)
-	text = reItalic.ReplaceAllString(text, `<i>$1</i>`)
-	reCode := regexp.MustCompile("`([^`]+)`")
-	text = reCode.ReplaceAllString(text, `<code>$1</code>`)
-	reListItem := regexp.MustCompile(`(?m)^\* `)
-	text = reListItem.ReplaceAllString(text, "• ")
-	return text
+    // Блочные кодовые фрагменты: Telegram HTML не принимает атрибуты у <code>,
+    // поэтому удаляем class и экранируем содержимое.
+    reCodeBlock := regexp.MustCompile("(?s)```(\\w+)?\n(.*?)\n```")
+    text = reCodeBlock.ReplaceAllStringFunc(text, func(match string) string {
+        parts := reCodeBlock.FindStringSubmatch(match)
+        code := parts[2]
+        return fmt.Sprintf(`<pre><code>%s</code></pre>`, html.EscapeString(strings.TrimSpace(code)))
+    })
+
+    // Инлайн-код: обязательно экранируем содержимое внутри тегов <code>.
+    reInlineCode := regexp.MustCompile("`([^`]+)`")
+    text = reInlineCode.ReplaceAllStringFunc(text, func(m string) string {
+        // Срезаем обрамляющие обратные кавычки
+        inner := m[1 : len(m)-1]
+        return "<code>" + html.EscapeString(inner) + "</code>"
+    })
+
+    // Жирный текст **...**
+    reBold := regexp.MustCompile(`\*\*(.+?)\*\*`)
+    text = reBold.ReplaceAllString(text, `<b>$1</b>`)
+
+    // Списки: заменяем маркер "* " на символ точки, до обработки курсивов,
+    // чтобы звёздочки списка не интерпретировались как курсив.
+    reListItem := regexp.MustCompile(`(?m)^(\*|-) `)
+    text = reListItem.ReplaceAllString(text, "• ")
+
+    // Курсив *...*: избегаем пересечения с **...** и не захватываем переносы строк.
+    // Шаблон берёт предшествующий символ (не '*') для устойчивости.
+    reItalic := regexp.MustCompile(`(^|[^*])\*([^*\n]+)\*`)
+    text = reItalic.ReplaceAllString(text, `$1<i>$2</i>`)
+
+    return text
 }
 
 func SplitMessage(message string, maxLen int) []string {
