@@ -5,21 +5,41 @@ import (
 	"time"
 )
 
-// Ключи переменных окружения
+// AI Provider constants
 const (
-	EnvBotToken     = "BOT_TOKEN"
-	EnvGoogleAPIKey = "GOOGLE_API_KEY"
-	EnvPrimaryModel = "PRIMARY_MODEL"
-	EnvFallbackModel = "FALLBACK_MODEL"
-	EnvSystemPrompt = "SYSTEM_PROMPT"
-	EnvUserPromptTemplate = "USER_PROMPT_TEMPLATE"
-	EnvShortPromptTemplate = "SHORT_PROMPT_TEMPLATE"
+	ProviderGoogle = "google"
+	ProviderGroq   = "groq"
 )
 
-// Значения по умолчанию
+// Ключи переменных окружения
+const (
+	EnvBotToken            = "BOT_TOKEN"
+	EnvAIProvider          = "AI_PROVIDER"
+	EnvGoogleAPIKey        = "GOOGLE_API_KEY"
+	EnvPrimaryModel        = "PRIMARY_MODEL"
+	EnvFallbackModel       = "FALLBACK_MODEL"
+	EnvSystemPrompt        = "SYSTEM_PROMPT"
+	EnvUserPromptTemplate  = "USER_PROMPT_TEMPLATE"
+	EnvShortPromptTemplate = "SHORT_PROMPT_TEMPLATE"
+
+	// Groq-specific environment variables
+	EnvGroqAPIKey        = "GROQ_API_KEY"
+	EnvGroqWhisperModel  = "GROQ_WHISPER_MODEL"
+	EnvGroqPrimaryModel  = "GROQ_PRIMARY_MODEL"
+	EnvGroqFallbackModel = "GROQ_FALLBACK_MODEL"
+)
+
+// Значения по умолчанию для Google
 const (
 	DefaultPrimaryModel  = "gemini-flash-latest"
 	DefaultFallbackModel = "gemini-flash-lite-latest"
+)
+
+// Значения по умолчанию для Groq
+const (
+	DefaultGroqWhisperModel  = "whisper-large-v3-turbo"
+	DefaultGroqPrimaryModel  = "moonshotai/kimi-k2-instruct-0905"
+	DefaultGroqFallbackModel = "llama-3.3-70b-versatile"
 )
 
 var (
@@ -45,16 +65,27 @@ var (
 )
 
 type Config struct {
-	BotToken            string
-	GoogleAPIKey        string
-	PrimaryModel        string
-	FallbackModel       string
+	BotToken   string
+	AIProvider string
+
+	// Google-specific config
+	GoogleAPIKey  string
+	PrimaryModel  string
+	FallbackModel string
+
+	// Groq-specific config
+	GroqAPIKey        string
+	GroqWhisperModel  string
+	GroqPrimaryModel  string
+	GroqFallbackModel string
+
+	// Shared prompts
 	SystemPrompt        string
 	UserPromptTemplate  string
 	ShortPromptTemplate string
 
-	MaxMessageLength    int
-	MaxFileSize         int64
+	MaxMessageLength int
+	MaxFileSize      int64
 
 	PrimaryModelRetries  int
 	FallbackModelRetries int
@@ -70,19 +101,29 @@ func getEnvOrDefault(key, def string) string {
 
 func LoadFromEnv() Config {
 	return Config{
-		BotToken:            os.Getenv(EnvBotToken),
-		GoogleAPIKey:        os.Getenv(EnvGoogleAPIKey),
-		PrimaryModel:        getEnvOrDefault(EnvPrimaryModel, DefaultPrimaryModel),
-		FallbackModel:       getEnvOrDefault(EnvFallbackModel, DefaultFallbackModel),
+		BotToken:   os.Getenv(EnvBotToken),
+		AIProvider: getEnvOrDefault(EnvAIProvider, ProviderGoogle),
+
+		// Google config
+		GoogleAPIKey:  os.Getenv(EnvGoogleAPIKey),
+		PrimaryModel:  getEnvOrDefault(EnvPrimaryModel, DefaultPrimaryModel),
+		FallbackModel: getEnvOrDefault(EnvFallbackModel, DefaultFallbackModel),
+
+		// Groq config
+		GroqAPIKey:        os.Getenv(EnvGroqAPIKey),
+		GroqWhisperModel:  getEnvOrDefault(EnvGroqWhisperModel, DefaultGroqWhisperModel),
+		GroqPrimaryModel:  getEnvOrDefault(EnvGroqPrimaryModel, DefaultGroqPrimaryModel),
+		GroqFallbackModel: getEnvOrDefault(EnvGroqFallbackModel, DefaultGroqFallbackModel),
+
+		// Shared
 		SystemPrompt:        getEnvOrDefault(EnvSystemPrompt, DefaultSystemPrompt),
 		UserPromptTemplate:  getEnvOrDefault(EnvUserPromptTemplate, DefaultUserPromptTemplate),
 		ShortPromptTemplate: getEnvOrDefault(EnvShortPromptTemplate, DefaultShortPromptTemplate),
-		MaxMessageLength:    4096,
-		MaxFileSize:         20 * 1024 * 1024,
+
+		MaxMessageLength:     4096,
+		MaxFileSize:          20 * 1024 * 1024,
 		PrimaryModelRetries:  3,
 		FallbackModelRetries: 5,
 		RetryDelay:           3 * time.Second,
 	}
 }
-
-

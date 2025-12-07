@@ -17,15 +17,15 @@ import (
 )
 
 type App struct {
-	cfg        config.Config
-	tele       *telegram.Client
-	ai         *ai.Service
-	media      *media.Processor
-	cache      map[int]string
+	cfg   config.Config
+	tele  *telegram.Client
+	ai    ai.AIProvider
+	media *media.Processor
+	cache map[int]string
 }
 
-func NewApp(cfg config.Config, tele *telegram.Client, aiSvc *ai.Service, mediaProc *media.Processor) *App {
-	return &App{cfg: cfg, tele: tele, ai: aiSvc, media: mediaProc, cache: make(map[int]string)}
+func NewApp(cfg config.Config, tele *telegram.Client, aiProvider ai.AIProvider, mediaProc *media.Processor) *App {
+	return &App{cfg: cfg, tele: tele, ai: aiProvider, media: mediaProc, cache: make(map[int]string)}
 }
 
 func (a *App) sendFormattedMessage(chatID int64, replyTo int, text, title string, useSpoiler bool) {
@@ -50,8 +50,21 @@ func (a *App) sendFormattedMessage(chatID int64, replyTo int, text, title string
 	}
 }
 
+func (a *App) getProviderInfo() string {
+	switch strings.ToLower(a.cfg.AIProvider) {
+	case config.ProviderGroq:
+		return fmt.Sprintf("Groq AI (Whisper: %s, LLM: %s/%s)",
+			a.cfg.GroqWhisperModel, a.cfg.GroqPrimaryModel, a.cfg.GroqFallbackModel)
+	default:
+		return fmt.Sprintf("Google Gemini AI (модели: %s/%s)",
+			a.cfg.PrimaryModel, a.cfg.FallbackModel)
+	}
+}
+
 func (a *App) handleUpdate(update telegram.Update) {
-	if update.Message == nil { return }
+	if update.Message == nil {
+		return
+	}
 	msg := update.Message
 	log.Printf("Получено сообщение от %d в чате %d", msg.From.ID, msg.Chat.ID)
 
@@ -72,10 +85,10 @@ func (a *App) handleUpdate(update telegram.Update) {
 	if strings.HasPrefix(msg.Text, "/start") {
 		welcome := fmt.Sprintf(
 			"Привет! Я бот, который может транскрибировать и суммировать голосовые сообщения, видео и аудиофайлы.\n\n"+
-			"Просто отправь мне голосовое сообщение, видео или аудиофайл (mp3, wav, oga), и я преобразую его в текст и создам краткое резюме.\n\n"+
-			"P.S Данный бот работает на мощностях Google Gemini AI, использует модели %s и %s для транскрипции и суммаризации\n\n"+
-			"Важно: максимальный размер файла для обработки - %d МБ.",
-			a.cfg.PrimaryModel, a.cfg.FallbackModel, a.cfg.MaxFileSize/(1024*1024),
+				"Просто отправь мне голосовое сообщение, видео или аудиофайл (mp3, wav, oga), и я преобразую его в текст и создам краткое резюме.\n\n"+
+				"P.S Данный бот работает на мощностях %s\n\n"+
+				"Важно: максимальный размер файла для обработки - %d МБ.",
+			a.getProviderInfo(), a.cfg.MaxFileSize/(1024*1024),
 		)
 		_ = a.tele.SendMessage(msg.Chat.ID, welcome, msg.MessageID, "")
 		return
@@ -101,9 +114,16 @@ func (a *App) handleUpdate(update telegram.Update) {
 		fileSize = msg.Document.FileSize
 		supported := []string{".mp3", ".wav", ".oga"}
 		ok := false
-		for _, ext := range supported { if strings.HasSuffix(strings.ToLower(msg.Document.FileName), ext) { ok = true; break } }
+		for _, ext := range supported {
+			if strings.HasSuffix(strings.ToLower(msg.Document.FileName), ext) {
+				ok = true
+				break
+			}
+		}
 		isSupportedDocument = ok
-	} else { return }
+	} else {
+		return
+	}
 
 	if fileSize > a.cfg.MaxFileSize {
 		_ = a.tele.SendMessage(msg.Chat.ID, fmt.Sprintf("Извините, максимальный размер файла - %d МБ. Ваш файл слишком большой.", a.cfg.MaxFileSize/(1024*1024)), msg.MessageID, "")
@@ -124,7 +144,7 @@ func (a *App) handleUpdate(update telegram.Update) {
 	defer os.Remove(audioPath)
 
 	ctx := context.Background()
-	transcriptedText, err := a.ai.AudioToText(ctx, audioPath, os.ReadFile)
+	transcriptedText, err := a.ai.AudioToText(ctx, audioPath)
 	if err != nil {
 		log.Printf("Ошибка транскрипции для сообщения %d: %v", msg.MessageID, err)
 		_ = a.tele.SendMessage(msg.Chat.ID, fmt.Sprintf("Произошла ошибка при транскрипции аудио: %v", err), msg.MessageID, "")
@@ -155,15 +175,17 @@ func (a *App) PollUpdates() {
 		if err != nil {
 			log.Printf("Ошибка получения обновлений: %v. Повтор через 3 секунды.", err)
 			timeSleep := a.cfg.RetryDelay
-			if timeSleep <= 0 { timeSleep = 3 * time.Second }
+			if timeSleep <= 0 {
+				timeSleep = 3 * time.Second
+			}
 			<-time.After(timeSleep)
 			continue
 		}
 		for _, update := range updates {
-			if update.UpdateID >= offset { offset = update.UpdateID + 1 }
+			if update.UpdateID >= offset {
+				offset = update.UpdateID + 1
+			}
 			go a.handleUpdate(update)
 		}
 	}
 }
-
-
